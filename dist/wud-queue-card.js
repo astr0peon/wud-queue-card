@@ -757,7 +757,7 @@ var en_default = {
     exclude: "Leave out",
     exclude_helper: "Update entities never shown.",
     height: "Height",
-    height_helper: "The card's height in pixels. The open list scrolls inside it. Leave empty to fit the content."
+    height_helper: "The card's height in pixels. If not set, the card's height adapts to its content."
   }
 };
 
@@ -800,7 +800,7 @@ var fi_default = {
     exclude: "J\xE4t\xE4 pois",
     exclude_helper: "P\xE4ivitysentiteetit, joita ei koskaan n\xE4ytet\xE4.",
     height: "Korkeus",
-    height_helper: "Kortin korkeus pikselein\xE4. Avoin lista vierii sen sis\xE4ll\xE4. Tyhj\xE4n\xE4 kortti on sis\xE4lt\xF6ns\xE4 korkuinen."
+    height_helper: "Kortin korkeus pikselein\xE4. Jos ei asetettu, kortin korkeus mukautuu sis\xE4lt\xF6\xF6n."
   }
 };
 

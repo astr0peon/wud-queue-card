@@ -36,6 +36,6 @@
         "exclude": "Jätä pois",
         "exclude_helper": "Päivitysentiteetit, joita ei koskaan näytetä.",
         "height": "Korkeus",
-        "height_helper": "Kortin korkeus pikseleinä. Avoin lista vierii sen sisällä. Tyhjänä kortti on sisältönsä korkuinen."
+        "height_helper": "Kortin korkeus pikseleinä. Jos ei asetettu, kortin korkeus mukautuu sisältöön."
     }
 }

@@ -36,6 +36,6 @@
         "exclude": "Leave out",
         "exclude_helper": "Update entities never shown.",
         "height": "Height",
-        "height_helper": "The card's height in pixels. The open list scrolls inside it. Leave empty to fit the content."
+        "height_helper": "The card's height in pixels. If not set, the card's height adapts to its content."
     }
 }
