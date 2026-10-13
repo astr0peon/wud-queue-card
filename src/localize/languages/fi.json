@@ -1,0 +1,41 @@
+{
+    "common": {
+        "name": "WUD-jonokortti",
+        "description": "What's Up Dockerin konttipäivitykset compose-projekteittain",
+        "title": "Docker-kontit",
+        "invalid_configuration": "Virheelliset asetukset",
+        "no_entities": "What's Up Dockerin päivityksiä ei löytynyt",
+        "all_current": "Kaikki ajan tasalla",
+        "available": "Päivityksiä saatavilla",
+        "updating": "Päivitetään {name}",
+        "failed": "{name} ei päivittynyt",
+        "current_count": "{n} ajan tasalla",
+        "pending_count": "{n} odottaa päivitystä",
+        "show": "Näytä",
+        "hide": "Piilota",
+        "services": "{n} palvelua",
+        "services_done": "{done}/{n} palvelua",
+        "install": "Päivitä {name}"
+    },
+    "status": {
+        "running": "Päivitetään",
+        "done": "Päivitetty",
+        "failed": "Epäonnistui"
+    },
+    "error": {
+        "service": "Home Assistant ei välittänyt päivitystä What's Up Dockerille. {message}",
+        "start": "What's Up Docker ei aloittanut päivitystä minuutissa. Onko se käynnissä?",
+        "version": "Päivitys päättyi, mutta kontti on yhä versiossa {version}. Syy löytyy What's Up Dockerin lokista."
+    },
+    "editor": {
+        "title": "Otsikko",
+        "device": "What's Up Docker -laite",
+        "device_helper": "Näyttää tämän laitteen kaikki päivitykset. Tyhjänä kaikki What's Up Dockerin päivitykset.",
+        "entities": "Kontit",
+        "entities_helper": "Näyttää vain nämä päivitysentiteetit, eikä etsi niitä itse.",
+        "exclude": "Jätä pois",
+        "exclude_helper": "Päivitysentiteetit, joita ei koskaan näytetä.",
+        "height": "Korkeus",
+        "height_helper": "Kortin korkeus pikseleinä. Avoin lista vierii sen sisällä. Tyhjänä kortti on sisältönsä korkuinen."
+    }
+}

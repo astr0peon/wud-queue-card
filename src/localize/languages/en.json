@@ -1,0 +1,41 @@
+{
+    "common": {
+        "name": "WUD Queue card",
+        "description": "What's Up Docker's container updates, grouped by compose project",
+        "title": "Docker containers",
+        "invalid_configuration": "Invalid configuration",
+        "no_entities": "No What's Up Docker updates found",
+        "all_current": "All up to date",
+        "available": "Updates available",
+        "updating": "Updating {name}",
+        "failed": "{name} was not updated",
+        "current_count": "{n} up to date",
+        "pending_count": "{n} waiting for an update",
+        "show": "Show",
+        "hide": "Hide",
+        "services": "{n} services",
+        "services_done": "{done}/{n} services",
+        "install": "Update {name}"
+    },
+    "status": {
+        "running": "Updating",
+        "done": "Updated",
+        "failed": "Failed"
+    },
+    "error": {
+        "service": "Home Assistant did not send the update to What's Up Docker. {message}",
+        "start": "What's Up Docker did not start the update within a minute. Is it running?",
+        "version": "The update ended, but the container is still on {version}. What's Up Docker's log has the reason."
+    },
+    "editor": {
+        "title": "Title",
+        "device": "What's Up Docker device",
+        "device_helper": "Shows every update of this device. Leave empty for every What's Up Docker update.",
+        "entities": "Containers",
+        "entities_helper": "Shows only these update entities, instead of finding them.",
+        "exclude": "Leave out",
+        "exclude_helper": "Update entities never shown.",
+        "height": "Height",
+        "height_helper": "The card's height in pixels. The open list scrolls inside it. Leave empty to fit the content."
+    }
+}

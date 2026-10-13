@@ -1,0 +1,6 @@
+{
+    "name": "WUD Queue card",
+    "render_readme": true,
+    "filename": "wud-queue-card.js",
+    "homeassistant": "2026.9.3"
+}
