@@ -1,15 +1,15 @@
 # WUD Queue card
 
 Home Assistant dashboard card for What's Up Docker's container updates, grouped by compose project, with an install
-button on each row.
+button on each row, and a queue that installs them one at a time with the WUD Queue integration.
 
 [![GitHub Release][releases-shield]][releases] [![GitHub Release Date][release-date-shield]][releases] [![HACS][hacs-shield]][hacs] [![License][license-shield]](LICENSE)
 
 <p>
 <img src="https://raw.githubusercontent.com/jesmak/wud-queue-card/main/docs/images/waiting-light.png#gh-light-mode-only" width="400" alt="Four containers waiting for an update, a compose project's services grouped under its name with their old and new versions and an install button on each">
 <img src="https://raw.githubusercontent.com/jesmak/wud-queue-card/main/docs/images/waiting-dark.png#gh-dark-mode-only" width="400" alt="Four containers waiting for an update, a compose project's services grouped under its name with their old and new versions and an install button on each">
-<img src="https://raw.githubusercontent.com/jesmak/wud-queue-card/main/docs/images/updating-light.png#gh-light-mode-only" width="400" alt="One container updating, its row marked as updating and the other install buttons locked until it finishes">
-<img src="https://raw.githubusercontent.com/jesmak/wud-queue-card/main/docs/images/updating-dark.png#gh-dark-mode-only" width="400" alt="One container updating, its row marked as updating and the other install buttons locked until it finishes">
+<img src="https://raw.githubusercontent.com/jesmak/wud-queue-card/main/docs/images/queue-light.png#gh-light-mode-only" width="400" alt="A queue running, with a progress bar of four segments, one container updated, a group of services updating two of five, and two containers queued">
+<img src="https://raw.githubusercontent.com/jesmak/wud-queue-card/main/docs/images/queue-dark.png#gh-dark-mode-only" width="400" alt="A queue running, with a progress bar of four segments, one container updated, a group of services updating two of five, and two containers queued">
 </p>
 
 ## What is it?
@@ -23,9 +23,14 @@ workers built on one Node image, are a single row and are installed together, so
 in step. WUD's own container always comes last, since updating it restarts WUD in the middle of whatever else is
 going on.
 
-The card installs one row at a time and follows each install it starts. WUD itself reports no failures, so the card
-works them out. An install that never starts, or one that ends with the container still on its old version, is shown
-as failed on its row.
+On its own, the card installs one row at a time and follows each install it starts. WUD itself reports no failures, so
+the card works them out. An install that never starts, or one that ends with the container still on its old version,
+is shown as failed on its row.
+
+With the [WUD Queue](https://github.com/jesmak/wud_queue) integration, the card becomes the queue's dashboard. Its
+buttons add rows to a queue in Home Assistant, which installs them one at a time even with the browser closed, stops
+at the first failure, and fires events an automation can act on. "Update all" queues everything waiting, and every
+open dashboard shows the same queue. The integration is optional. The card finds it by itself when it is installed.
 
 ## Installation
 
@@ -42,6 +47,9 @@ as failed on its row.
 2. In Home Assistant settings, open dashboards, click the three dots at the top right and open resources
 3. Add a new resource with the path `/local/wud-queue-card.js` and type JavaScript
 4. Refresh your browser
+
+For the queue, install the [WUD Queue](https://github.com/jesmak/wud_queue) integration as its README describes. The
+card needs no setting for it.
 
 ### What WUD needs
 
@@ -96,7 +104,8 @@ says that updates are available or that everything is up to date. Then come the 
 Each WUD watcher is a Docker host of its own, and its projects are kept apart from the other hosts' even when they
 share a name. When the card shows several watchers, each project's name is followed by its watcher's.
 
-When nothing is waiting, the card is just the title and a line that opens the up-to-date list:
+When nothing is waiting, the card is just the title and a line that opens the up-to-date list. When the first update
+comes in, the waiting list opens by itself, even if the up-to-date list was open.
 
 <img src="https://raw.githubusercontent.com/jesmak/wud-queue-card/main/docs/images/all-current-light.png#gh-light-mode-only" width="490" alt="A card with all containers up to date, folded into a single line">
 <img src="https://raw.githubusercontent.com/jesmak/wud-queue-card/main/docs/images/all-current-dark.png#gh-dark-mode-only" width="490" alt="A card with all containers up to date, folded into a single line">
@@ -104,6 +113,8 @@ When nothing is waiting, the card is just the title and a line that opens the up
 Clicking a row, or pressing Enter on it, opens its update entity's dialog.
 
 ## Installing updates
+
+### Without the integration
 
 The install button calls `update.install` on the row's update entities. A row of several services sends them all in
 one call, and WUD installs them one after another. While anything is installing, the other buttons are locked, so
@@ -118,8 +129,26 @@ The row shows its progress while the card is open:
   the details. The install button comes back, so the row can be tried again.
 
 An updated row stays in the waiting list for ten minutes, or until an even newer version comes out, and then moves
-to the up-to-date list. The card remembers only the installs it started, and only until the page is reloaded. An install started elsewhere,
-such as from Home Assistant's own update dialog, shows as updating while WUD runs it, but its outcome isn't followed.
+to the up-to-date list. The card remembers only the installs it started, and only until the page is reloaded. An
+install started elsewhere, such as from Home Assistant's own update dialog, shows as updating while WUD runs it, but
+its outcome isn't followed.
+
+### With the WUD Queue integration
+
+The install buttons add their rows to the queue instead, and stay usable while it runs. A thin bar under the title
+has a segment for each row in the queue, and the rows show **Queued**, **Updating**, **Updated**, **Failed** or
+**Not installed**. The button in the header does what fits the moment:
+
+- **Update all** queues every row waiting.
+- **Stop queue** lets the row being installed finish and leaves the rest.
+- **Retry**, after a failure, queues the failed row and the ones that didn't run, and starts again.
+- **Clear**, when everything queued is done, puts the finished rows away. The queue does it by itself ten minutes
+  after it finishes.
+
+<img src="https://raw.githubusercontent.com/jesmak/wud-queue-card/main/docs/images/failed-light.png#gh-light-mode-only" width="490" alt="A queue stopped by a failure, the failed row red with the reason, the rows after it not installed, and Retry in the header">
+<img src="https://raw.githubusercontent.com/jesmak/wud-queue-card/main/docs/images/failed-dark.png#gh-dark-mode-only" width="490" alt="A queue stopped by a failure, the failed row red with the reason, the rows after it not installed, and Retry in the header">
+
+The queue's own README tells how it decides an install failed, and what its events carry.
 
 ## Sizes
 
@@ -166,8 +195,9 @@ entities:
 ## Data
 
 The card reads the update entities WUD publishes over MQTT. It takes their installed and latest versions, whether an
-install is running, and the attributes WUD adds to them, such as the compose project, service and image. It fetches nothing
-itself and talks to WUD only through `update.install`.
+install is running, and the attributes WUD adds to them, such as the compose project, service and image. With the
+integration it also reads the queue's sensor, which it finds in the entity registry by the integration's name. It
+fetches nothing itself, and talks to WUD only through `update.install` or the queue's actions.
 
 ## Translating
 

@@ -4,7 +4,7 @@
         "description": "What's Up Dockerin konttipäivitykset compose-projekteittain",
         "title": "Docker-kontit",
         "invalid_configuration": "Virheelliset asetukset",
-        "no_entities": "What's Up Dockerin päivityksiä ei löytynyt",
+        "no_entities": "What's Up Dockerin päivitysentiteettejä ei löytynyt",
         "all_current": "Kaikki ajan tasalla",
         "available": "Päivityksiä saatavilla",
         "updating": "Päivitetään {name}",
@@ -15,26 +15,35 @@
         "hide": "Piilota",
         "services": "{n} palvelua",
         "services_done": "{done}/{n} palvelua",
-        "install": "Päivitä {name}"
+        "install": "Päivitä {name}",
+        "update_all": "Päivitä kaikki",
+        "stop": "Pysäytä jono",
+        "stopping": "Pysähtyy",
+        "retry": "Yritä uudelleen",
+        "queue_stopped": "Jono pysäytetty",
+        "clear": "Kuittaa"
     },
     "status": {
+        "queued": "Jonossa",
         "running": "Päivitetään",
         "done": "Päivitetty",
-        "failed": "Epäonnistui"
+        "failed": "Epäonnistui",
+        "not_run": "Ei asennettu"
     },
     "error": {
         "service": "Home Assistant ei välittänyt päivitystä What's Up Dockerille. {message}",
         "start": "What's Up Docker ei aloittanut päivitystä minuutissa. Onko se käynnissä?",
-        "version": "Päivitys päättyi, mutta kontti on yhä versiossa {version}. Syy löytyy What's Up Dockerin lokista."
+        "version": "Päivitys päättyi, mutta kontti on yhä versiossa {version}. Tarkista What's Up Dockerin lokit.",
+        "timeout": "Päivitys ei valmistunut puolessa tunnissa. Tarkista What's Up Dockerin lokit."
     },
     "editor": {
         "title": "Otsikko",
         "device": "What's Up Docker -laite",
-        "device_helper": "Näyttää tämän laitteen kaikki päivitykset. Tyhjänä kaikki What's Up Dockerin päivitykset.",
+        "device_helper": "Näyttää kaikki valitun WUD-laitteen päivitykset. Jätä tyhjäksi näyttääksesi kaikkien WUD-laitteiden päivitykset.",
         "entities": "Kontit",
-        "entities_helper": "Näyttää vain nämä päivitysentiteetit, eikä etsi niitä itse.",
+        "entities_helper": "Jos asetat käsin päivitysentiteettejä, ainoastaan ne näytetään.",
         "exclude": "Jätä pois",
-        "exclude_helper": "Päivitysentiteetit, joita ei koskaan näytetä.",
+        "exclude_helper": "Päivitysentiteetit, joita ei koskaan näytetä. Kun haluat näyttää laitteelta kaiken, paitsi nämä.",
         "height": "Korkeus",
         "height_helper": "Kortin korkeus pikseleinä. Jos ei asetettu, kortin korkeus mukautuu sisältöön."
     }

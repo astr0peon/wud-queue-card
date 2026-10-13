@@ -4,7 +4,7 @@
         "description": "What's Up Docker's container updates, grouped by compose project",
         "title": "Docker containers",
         "invalid_configuration": "Invalid configuration",
-        "no_entities": "No What's Up Docker updates found",
+        "no_entities": "No What's Up Docker update entities found",
         "all_current": "All up to date",
         "available": "Updates available",
         "updating": "Updating {name}",
@@ -15,26 +15,35 @@
         "hide": "Hide",
         "services": "{n} services",
         "services_done": "{done}/{n} services",
-        "install": "Update {name}"
+        "install": "Update {name}",
+        "update_all": "Update all",
+        "stop": "Stop queue",
+        "stopping": "Stopping",
+        "retry": "Retry",
+        "queue_stopped": "Queue stopped",
+        "clear": "Clear"
     },
     "status": {
+        "queued": "Queued",
         "running": "Updating",
         "done": "Updated",
-        "failed": "Failed"
+        "failed": "Failed",
+        "not_run": "Not installed"
     },
     "error": {
         "service": "Home Assistant did not send the update to What's Up Docker. {message}",
         "start": "What's Up Docker did not start the update within a minute. Is it running?",
-        "version": "The update ended, but the container is still on {version}. What's Up Docker's log has the reason."
+        "version": "The update ended, but the container is still on {version}. Check What's Up Docker's logs.",
+        "timeout": "The update did not finish within half an hour. Check What's Up Docker's logs."
     },
     "editor": {
         "title": "Title",
         "device": "What's Up Docker device",
-        "device_helper": "Shows every update of this device. Leave empty for every What's Up Docker update.",
+        "device_helper": "Shows every update of the chosen WUD device. Leave empty to show the updates of all WUD devices.",
         "entities": "Containers",
-        "entities_helper": "Shows only these update entities, instead of finding them.",
+        "entities_helper": "If you set update entities by hand, only they are shown.",
         "exclude": "Leave out",
-        "exclude_helper": "Update entities never shown.",
+        "exclude_helper": "Update entities never shown. For when you want to show everything from a device except these.",
         "height": "Height",
         "height_helper": "The card's height in pixels. If not set, the card's height adapts to its content."
     }

@@ -11,6 +11,7 @@ export interface HassEntity {
 export interface HassEntityEntry {
     entity_id: string;
     device_id?: string | null;
+    platform?: string;
 }
 
 export interface HomeAssistant {

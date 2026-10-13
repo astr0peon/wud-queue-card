@@ -7,7 +7,7 @@
  */
 import { START_TIMEOUT, VERSION_GRACE } from "./const";
 import type { HassEntity, HomeAssistant } from "./hass";
-import type { Container, Project, RowStatus, Unit, WudQueueCardConfig } from "./types";
+import type { Container, Project, Queue, RowStatus, Unit, WudQueueCardConfig } from "./types";
 
 /** WUD's own image, by its current name and the one it had before moving to getwud. */
 const WUD_IMAGE = /(^|\/)(getwud\/wud|fmartinou\/whats-up-docker)$/;
@@ -160,8 +160,11 @@ export interface Install {
 export interface Followed {
     install: Install;
     status: RowStatus;
-    /** Why it failed: Home Assistant refused, WUD never started, or it finished without the new version. */
-    reason?: "service" | "start" | "version";
+    /**
+     * Why it failed: Home Assistant refused, WUD never started, it finished without the new version, or (in the
+     * integration's queue only) it ran for too long.
+     */
+    reason?: "service" | "start" | "version" | "timeout";
 }
 
 /**
@@ -198,4 +201,46 @@ export function follow(unit: Unit, install: Install, now: number): Followed {
 /** How many of a unit's services are on their new version, while it installs. */
 export function servicesDone(unit: Unit, install: Install | undefined): number {
     return install ? unit.containers.filter((c) => c.installed === install.targets[c.entity_id]).length : 0;
+}
+
+/** The WUD Queue integration's sensor, found by its platform so that a renamed entity is found too. */
+export function queueEntityId(hass: HomeAssistant): string | undefined {
+    // The registry is keyed by entity id, so the key is read rather than the entry's own copy of it.
+    return Object.entries(hass.entities ?? {}).find(([id, e]) => e?.platform === "wud_queue" && id.startsWith("sensor."))?.[0];
+}
+
+/** The WUD Queue integration's queue. */
+export function queueOf(hass: HomeAssistant): Queue | undefined {
+    const id = queueEntityId(hass);
+    const state = id && hass.states[id];
+    if (!state || !Array.isArray(state.attributes.items)) {
+        return undefined;
+    }
+    return {
+        entity_id: state.entity_id,
+        state: state.state as Queue["state"],
+        stopping: state.attributes.stopping === true,
+        items: state.attributes.items as Queue["items"],
+    };
+}
+
+/**
+ * A row's place in the integration's queue, in the shape the card uses for the installs it follows itself. The row's
+ * latest item counts, as a container can be queued again after a failure.
+ */
+export function followQueue(unit: Unit, queue: Queue): Followed | undefined {
+    const ids = new Set(unit.containers.map((c) => c.entity_id));
+    const item = [...queue.items].reverse().find((i) => i.entities.some((e) => ids.has(e.entity_id)));
+    if (!item) {
+        return undefined;
+    }
+    const versions = new Map(item.entities.map((e) => [e.entity_id, e]));
+    const install: Install = {
+        at: 0,
+        from: Object.fromEntries(unit.containers.map((c) => [c.entity_id, versions.get(c.entity_id)?.from ?? c.installed])),
+        targets: Object.fromEntries(unit.containers.map((c) => [c.entity_id, versions.get(c.entity_id)?.to ?? c.installed])),
+        started: true,
+        ...(item.error ? { error: item.error } : {}),
+    };
+    return { install, status: item.status as RowStatus, ...(item.reason ? { reason: item.reason } : {}) };
 }

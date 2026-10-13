@@ -51,4 +51,21 @@ export interface Project {
     units: Unit[];
 }
 
-export type RowStatus = "pending" | "running" | "done" | "failed";
+export type RowStatus = "pending" | "queued" | "running" | "done" | "failed" | "not_run";
+
+/** One item of the WUD Queue integration's queue, as its sensor lists it. */
+export interface QueueItem {
+    name: string;
+    status: "queued" | "running" | "done" | "failed" | "not_run";
+    reason: "service" | "start" | "version" | "timeout" | null;
+    error: string | null;
+    entities: { entity_id: string; from: string; to: string; status: string }[];
+}
+
+/** The WUD Queue integration's queue, read from its sensor. */
+export interface Queue {
+    entity_id: string;
+    state: "idle" | "running" | "stopped" | "failed";
+    stopping: boolean;
+    items: QueueItem[];
+}

@@ -717,6 +717,38 @@ function follow(unit, install, now) {
 function servicesDone(unit, install) {
   return install ? unit.containers.filter((c4) => c4.installed === install.targets[c4.entity_id]).length : 0;
 }
+function queueEntityId(hass) {
+  return Object.entries(hass.entities ?? {}).find(([id, e5]) => e5?.platform === "wud_queue" && id.startsWith("sensor."))?.[0];
+}
+function queueOf(hass) {
+  const id = queueEntityId(hass);
+  const state = id && hass.states[id];
+  if (!state || !Array.isArray(state.attributes.items)) {
+    return void 0;
+  }
+  return {
+    entity_id: state.entity_id,
+    state: state.state,
+    stopping: state.attributes.stopping === true,
+    items: state.attributes.items
+  };
+}
+function followQueue(unit, queue) {
+  const ids = new Set(unit.containers.map((c4) => c4.entity_id));
+  const item = [...queue.items].reverse().find((i5) => i5.entities.some((e5) => ids.has(e5.entity_id)));
+  if (!item) {
+    return void 0;
+  }
+  const versions = new Map(item.entities.map((e5) => [e5.entity_id, e5]));
+  const install = {
+    at: 0,
+    from: Object.fromEntries(unit.containers.map((c4) => [c4.entity_id, versions.get(c4.entity_id)?.from ?? c4.installed])),
+    targets: Object.fromEntries(unit.containers.map((c4) => [c4.entity_id, versions.get(c4.entity_id)?.to ?? c4.installed])),
+    started: true,
+    ...item.error ? { error: item.error } : {}
+  };
+  return { install, status: item.status, ...item.reason ? { reason: item.reason } : {} };
+}
 
 // src/localize/languages/en.json
 var en_default = {
@@ -725,7 +757,7 @@ var en_default = {
     description: "What's Up Docker's container updates, grouped by compose project",
     title: "Docker containers",
     invalid_configuration: "Invalid configuration",
-    no_entities: "No What's Up Docker updates found",
+    no_entities: "No What's Up Docker update entities found",
     all_current: "All up to date",
     available: "Updates available",
     updating: "Updating {name}",
@@ -736,26 +768,35 @@ var en_default = {
     hide: "Hide",
     services: "{n} services",
     services_done: "{done}/{n} services",
-    install: "Update {name}"
+    install: "Update {name}",
+    update_all: "Update all",
+    stop: "Stop queue",
+    stopping: "Stopping",
+    retry: "Retry",
+    queue_stopped: "Queue stopped",
+    clear: "Clear"
   },
   status: {
+    queued: "Queued",
     running: "Updating",
     done: "Updated",
-    failed: "Failed"
+    failed: "Failed",
+    not_run: "Not installed"
   },
   error: {
     service: "Home Assistant did not send the update to What's Up Docker. {message}",
     start: "What's Up Docker did not start the update within a minute. Is it running?",
-    version: "The update ended, but the container is still on {version}. What's Up Docker's log has the reason."
+    version: "The update ended, but the container is still on {version}. Check What's Up Docker's logs.",
+    timeout: "The update did not finish within half an hour. Check What's Up Docker's logs."
   },
   editor: {
     title: "Title",
     device: "What's Up Docker device",
-    device_helper: "Shows every update of this device. Leave empty for every What's Up Docker update.",
+    device_helper: "Shows every update of the chosen WUD device. Leave empty to show the updates of all WUD devices.",
     entities: "Containers",
-    entities_helper: "Shows only these update entities, instead of finding them.",
+    entities_helper: "If you set update entities by hand, only they are shown.",
     exclude: "Leave out",
-    exclude_helper: "Update entities never shown.",
+    exclude_helper: "Update entities never shown. For when you want to show everything from a device except these.",
     height: "Height",
     height_helper: "The card's height in pixels. If not set, the card's height adapts to its content."
   }
@@ -768,7 +809,7 @@ var fi_default = {
     description: "What's Up Dockerin konttip\xE4ivitykset compose-projekteittain",
     title: "Docker-kontit",
     invalid_configuration: "Virheelliset asetukset",
-    no_entities: "What's Up Dockerin p\xE4ivityksi\xE4 ei l\xF6ytynyt",
+    no_entities: "What's Up Dockerin p\xE4ivitysentiteettej\xE4 ei l\xF6ytynyt",
     all_current: "Kaikki ajan tasalla",
     available: "P\xE4ivityksi\xE4 saatavilla",
     updating: "P\xE4ivitet\xE4\xE4n {name}",
@@ -779,26 +820,35 @@ var fi_default = {
     hide: "Piilota",
     services: "{n} palvelua",
     services_done: "{done}/{n} palvelua",
-    install: "P\xE4ivit\xE4 {name}"
+    install: "P\xE4ivit\xE4 {name}",
+    update_all: "P\xE4ivit\xE4 kaikki",
+    stop: "Pys\xE4yt\xE4 jono",
+    stopping: "Pys\xE4htyy",
+    retry: "Yrit\xE4 uudelleen",
+    queue_stopped: "Jono pys\xE4ytetty",
+    clear: "Kuittaa"
   },
   status: {
+    queued: "Jonossa",
     running: "P\xE4ivitet\xE4\xE4n",
     done: "P\xE4ivitetty",
-    failed: "Ep\xE4onnistui"
+    failed: "Ep\xE4onnistui",
+    not_run: "Ei asennettu"
   },
   error: {
     service: "Home Assistant ei v\xE4litt\xE4nyt p\xE4ivityst\xE4 What's Up Dockerille. {message}",
     start: "What's Up Docker ei aloittanut p\xE4ivityst\xE4 minuutissa. Onko se k\xE4ynniss\xE4?",
-    version: "P\xE4ivitys p\xE4\xE4ttyi, mutta kontti on yh\xE4 versiossa {version}. Syy l\xF6ytyy What's Up Dockerin lokista."
+    version: "P\xE4ivitys p\xE4\xE4ttyi, mutta kontti on yh\xE4 versiossa {version}. Tarkista What's Up Dockerin lokit.",
+    timeout: "P\xE4ivitys ei valmistunut puolessa tunnissa. Tarkista What's Up Dockerin lokit."
   },
   editor: {
     title: "Otsikko",
     device: "What's Up Docker -laite",
-    device_helper: "N\xE4ytt\xE4\xE4 t\xE4m\xE4n laitteen kaikki p\xE4ivitykset. Tyhj\xE4n\xE4 kaikki What's Up Dockerin p\xE4ivitykset.",
+    device_helper: "N\xE4ytt\xE4\xE4 kaikki valitun WUD-laitteen p\xE4ivitykset. J\xE4t\xE4 tyhj\xE4ksi n\xE4ytt\xE4\xE4ksesi kaikkien WUD-laitteiden p\xE4ivitykset.",
     entities: "Kontit",
-    entities_helper: "N\xE4ytt\xE4\xE4 vain n\xE4m\xE4 p\xE4ivitysentiteetit, eik\xE4 etsi niit\xE4 itse.",
+    entities_helper: "Jos asetat k\xE4sin p\xE4ivitysentiteettej\xE4, ainoastaan ne n\xE4ytet\xE4\xE4n.",
     exclude: "J\xE4t\xE4 pois",
-    exclude_helper: "P\xE4ivitysentiteetit, joita ei koskaan n\xE4ytet\xE4.",
+    exclude_helper: "P\xE4ivitysentiteetit, joita ei koskaan n\xE4ytet\xE4. Kun haluat n\xE4ytt\xE4\xE4 laitteelta kaiken, paitsi n\xE4m\xE4.",
     height: "Korkeus",
     height_helper: "Kortin korkeus pikselein\xE4. Jos ei asetettu, kortin korkeus mukautuu sis\xE4lt\xF6\xF6n."
   }
@@ -922,8 +972,18 @@ var WudQueueCard = class extends i4 {
     super(...arguments);
     this.installs = /* @__PURE__ */ new Map();
     this.now = Date.now();
+    /** Each container as last seen with a usable entity, for while WUD recreates it. */
+    this.known = /* @__PURE__ */ new Map();
+    this.acting = false;
+    this.sliding = false;
     /** How each remembered install is going, worked out once per update. */
     this.followed = /* @__PURE__ */ new Map();
+    this.slid = (event) => {
+      if (event.propertyName === "grid-template-rows" && event.target === event.currentTarget) {
+        window.clearTimeout(this.slideTimer);
+        this.sliding = false;
+      }
+    };
   }
   static getConfigElement() {
     return document.createElement("wud-queue-card-editor");
@@ -964,6 +1024,7 @@ var WudQueueCard = class extends i4 {
     super.disconnectedCallback();
     window.clearInterval(this.timer);
     this.timer = void 0;
+    window.clearTimeout(this.slideTimer);
   }
   shouldUpdate(changed) {
     if (!this.config || !changed.has("hass") || changed.size > 1) {
@@ -974,6 +1035,13 @@ var WudQueueCard = class extends i4 {
       return true;
     }
     if ((previous.locale?.language ?? previous.language) !== (this.hass.locale?.language ?? this.hass.language)) {
+      return true;
+    }
+    if (previous.entities !== this.hass.entities) {
+      return true;
+    }
+    const queue = queueEntityId(this.hass);
+    if (queue && previous.states[queue] !== this.hass.states[queue]) {
       return true;
     }
     const before = selectedEntities(previous, this.config);
@@ -987,6 +1055,11 @@ var WudQueueCard = class extends i4 {
    */
   willUpdate() {
     const units = new Map(this.projects().flatMap((p3) => p3.units.map((u3) => [u3.key, u3])));
+    const pending = [...units.values()].some((u3) => u3.pending);
+    if (this.hadPending === false && pending) {
+      this.open = void 0;
+    }
+    this.hadPending = pending;
     const installs = /* @__PURE__ */ new Map();
     this.followed = /* @__PURE__ */ new Map();
     for (const [key, install] of this.installs) {
@@ -1002,6 +1075,15 @@ var WudQueueCard = class extends i4 {
       this.followed.set(key, followed);
     }
     this.installs = installs;
+    const queue = this.hass && queueOf(this.hass);
+    if (queue) {
+      for (const [key, unit] of units) {
+        const followed = followQueue(unit, queue);
+        if (followed && this.followed.get(key)?.install.error === void 0) {
+          this.followed.set(key, followed);
+        }
+      }
+    }
     const ticking = [...this.followed.values()].some((f3) => f3.status === "running" || f3.status === "done");
     if (ticking && this.timer === void 0) {
       this.timer = window.setInterval(() => this.now = Date.now(), 5e3);
@@ -1023,18 +1105,22 @@ var WudQueueCard = class extends i4 {
             </ha-card>`;
     }
     const followed = this.followed;
+    const queue = queueOf(this.hass);
     const active = (unit) => unit.pending || unit.installing || followed.has(unit.key);
     const pendingProjects = projects.filter((p3) => p3.units.some(active));
     const currentProjects = projects.filter((p3) => !p3.units.some(active));
     const pendingUnits = pendingProjects.flatMap((p3) => p3.units).filter(active);
     const currentCount = currentProjects.reduce((n5, p3) => n5 + p3.units.length, 0);
     const open = this.open === "current" ? "current" : pendingUnits.length > 0 ? "pending" : "none";
-    const busy = pendingUnits.some((u3) => u3.installing || followed.get(u3.key)?.status === "running");
+    const busy = queue ? queue.stopping : pendingUnits.some((u3) => u3.installing || followed.get(u3.key)?.status === "running");
     const height = this.config.height ? `height:${this.config.height}px` : "";
     return b2`
-            <ha-card style=${height}>
-                <div class="hd"><div class="hd-title">${title}</div></div>
-                ${this.statusLine(pendingUnits, followed)}
+            <ha-card style=${height} class=${this.sliding ? "sliding" : ""}>
+                <div class="hd">
+                    <div class="hd-title">${title}</div>
+                    ${queue ? this.queueAction(queue, pendingUnits, followed) : A}
+                </div>
+                ${this.statusLine(pendingUnits, followed, queue)} ${queue && queue.items.length > 0 ? this.progress(queue) : A}
                 <div class="list">
                     ${pendingUnits.length === 0 ? A : b2`${currentCount === 0 ? A : open === "pending" ? b2`<div class="switch pending">
                                               ${this.text("common.pending_count", { n: pendingUnits.length })}
@@ -1062,16 +1148,19 @@ var WudQueueCard = class extends i4 {
         `;
   }
   /** One line under the title: what is going on, or what is waiting. */
-  statusLine(units, followed) {
+  statusLine(units, followed, queue) {
     const running = units.filter((u3) => u3.installing || followed.get(u3.key)?.status === "running");
     if (running.length > 0) {
       const names = running.map((u3) => u3.name).join(", ");
-      return b2`<div class="hd-sub running">${this.text("common.updating", { name: names })}</div>`;
+      return b2`<div class="hd-sub">${this.text("common.updating", { name: names })}</div>`;
     }
     const failed = units.filter((u3) => followed.get(u3.key)?.status === "failed");
     if (failed.length > 0) {
       const names = failed.map((u3) => u3.name).join(", ");
-      return b2`<div class="hd-sub failed">${this.text("common.failed", { name: names })}</div>`;
+      return b2`<div class="hd-sub">${this.text("common.failed", { name: names })}</div>`;
+    }
+    if (queue?.state === "stopped") {
+      return b2`<div class="hd-sub">${this.text("common.queue_stopped")}</div>`;
     }
     const key = units.some((u3) => u3.pending) ? "common.available" : "common.all_current";
     return b2`<div class="hd-sub">${this.text(key)}</div>`;
@@ -1127,7 +1216,7 @@ var WudQueueCard = class extends i4 {
                 </div>
                 <div class="end">
                     ${// A failed row can be tried again. Its error stays under it until then.
-    status === "pending" || status === "failed" ? b2`<button
+    status === "pending" || status === "failed" || status === "not_run" ? b2`<button
                                   class="install"
                                   ?disabled=${busy}
                                   title=${this.text("common.install", { name: unit.name })}
@@ -1157,6 +1246,8 @@ var WudQueueCard = class extends i4 {
   statusIcon(status) {
     const icons = {
       pending: "mdi:docker",
+      queued: "mdi:timer-sand",
+      not_run: "mdi:minus-circle-outline",
       running: "mdi:sync",
       done: "mdi:check",
       failed: "mdi:alert-circle-outline"
@@ -1178,15 +1269,23 @@ var WudQueueCard = class extends i4 {
     return b2`<button
             class="switch ${section}"
             aria-expanded=${target === "none" ? "true" : "false"}
-            @click=${() => this.open = target}
+            @click=${() => this.switchTo(target)}
         >
             <span>${label} ${pill}</span>
             <span>${this.text(target === "none" ? "common.hide" : "common.show")}</span>
         </button>`;
   }
+  switchTo(target) {
+    this.open = target;
+    this.sliding = true;
+    window.clearTimeout(this.slideTimer);
+    this.slideTimer = window.setTimeout(() => this.sliding = false, 1e3);
+  }
   /** Content that slides open and shut. A shut one stays in the page, so the change can be animated. */
   fold(isOpen, content) {
-    return b2`<div class="fold ${isOpen ? "open" : ""}" ?inert=${!isOpen}><div class="fold-in">${content}</div></div>`;
+    return b2`<div class="fold ${isOpen ? "open" : ""}" ?inert=${!isOpen} @transitionend=${this.slid}>
+            <div class="fold-in">${content}</div>
+        </div>`;
   }
   /** On the closed row of waiting updates: whether something is installing or has failed. */
   sectionPill(units, followed) {
@@ -1204,15 +1303,27 @@ var WudQueueCard = class extends i4 {
       return;
     }
     const pending = unit.containers.filter((c4) => c4.pending);
-    const targets = Object.fromEntries(unit.containers.map((c4) => [c4.entity_id, c4.pending ? c4.latest : c4.installed]));
+    const install = {
+      at: Date.now(),
+      from: Object.fromEntries(unit.containers.map((c4) => [c4.entity_id, c4.installed])),
+      targets: Object.fromEntries(unit.containers.map((c4) => [c4.entity_id, c4.pending ? c4.latest : c4.installed])),
+      started: false
+    };
+    const queued = queueOf(this.hass) !== void 0;
     const installs = new Map(this.installs);
-    const from = Object.fromEntries(unit.containers.map((c4) => [c4.entity_id, c4.installed]));
-    const install = { at: Date.now(), from, targets, started: false };
-    installs.set(unit.key, install);
+    if (queued) {
+      installs.delete(unit.key);
+    } else {
+      installs.set(unit.key, install);
+    }
     this.installs = installs;
     this.now = Date.now();
     try {
-      await this.hass.callService("update", "install", {}, { entity_id: pending.map((c4) => c4.entity_id) });
+      if (queued) {
+        await this.hass.callService("wud_queue", "enqueue", { entity_id: pending.map((c4) => c4.entity_id) });
+      } else {
+        await this.hass.callService("update", "install", {}, { entity_id: pending.map((c4) => c4.entity_id) });
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error?.message ?? error);
       this.installs = new Map(this.installs).set(unit.key, { ...install, error: message });
@@ -1226,6 +1337,43 @@ var WudQueueCard = class extends i4 {
         this.moreInfo(unit);
       }
     };
+  }
+  /** The queue's one button: update everything waiting, stop the run, try again after a failure, or clear a finished run. */
+  queueAction(queue, units, followed) {
+    if (queue.state === "running") {
+      return this.actionButton(
+        this.text(queue.stopping ? "common.stopping" : "common.stop"),
+        queue.stopping,
+        () => this.call("stop")
+      );
+    }
+    if (queue.state === "failed") {
+      return this.actionButton(this.text("common.retry"), false, () => this.call("retry"));
+    }
+    const waiting = units.filter((u3) => u3.pending && !["queued", "running"].includes(followed.get(u3.key)?.status ?? "")).flatMap((u3) => u3.containers.filter((c4) => c4.pending).map((c4) => c4.entity_id));
+    if (waiting.length > 0) {
+      return this.actionButton(this.text("common.update_all"), false, () => this.call("enqueue", { entity_id: waiting }));
+    }
+    if (queue.items.some((i5) => i5.status === "done")) {
+      return this.actionButton(this.text("common.clear"), false, () => this.call("clear"));
+    }
+    return A;
+  }
+  actionButton(label, disabled, action) {
+    return b2`<button class="action" ?disabled=${disabled || this.acting} @click=${action}>${label}</button>`;
+  }
+  call(service, data = {}) {
+    if (!this.hass) {
+      return;
+    }
+    this.acting = true;
+    void this.hass.callService("wud_queue", service, data).catch(() => void 0).finally(() => this.acting = false);
+  }
+  /** A thin bar with a segment per item of the queue, coloured by how it went. */
+  progress(queue) {
+    return b2`<div class="bar" role="presentation">
+            ${queue.items.map((item) => b2`<span class="seg ${item.status}" title=${item.name}></span>`)}
+        </div>`;
   }
   moreInfo(unit) {
     this.dispatchEvent(
@@ -1241,7 +1389,29 @@ var WudQueueCard = class extends i4 {
       return [];
     }
     const hass = this.hass;
-    const containers = selectedEntities(hass, this.config).map((id) => containerOf(hass.states[id])).filter((c4) => c4 !== void 0);
+    const ids = selectedEntities(hass, this.config);
+    const installing = /* @__PURE__ */ new Set([
+      ...[...this.installs.values()].flatMap((install) => Object.keys(install.targets)),
+      ...(queueOf(hass)?.items ?? []).flatMap((item) => item.entities.map((e5) => e5.entity_id))
+    ]);
+    for (const id of installing) {
+      if (!ids.includes(id) && this.known.has(id) && hass.states[id] !== void 0) {
+        ids.push(id);
+      }
+    }
+    const containers = ids.map((id) => {
+      const state = hass.states[id];
+      const container = state && isWud(state) ? containerOf(state) : void 0;
+      if (container) {
+        this.known.set(id, container);
+      }
+      return container ?? this.known.get(id);
+    }).filter((c4) => c4 !== void 0);
+    for (const id of this.known.keys()) {
+      if (hass.states[id] === void 0) {
+        this.known.delete(id);
+      }
+    }
     return projectsOf(containers);
   }
   text(key, values = {}) {
@@ -1277,6 +1447,57 @@ var WudQueueCard = class extends i4 {
                 padding: 12px 12px 0 16px;
             }
 
+            /* The card's one call to action, so it looks like one on any theme. */
+            .action {
+                flex: none;
+                font: inherit;
+                font-size: 12.5px;
+                font-weight: 500;
+                color: var(--text-primary-color, #fff);
+                background: var(--primary-color);
+                border: 0;
+                border-radius: 16px;
+                padding: 5px 12px;
+                cursor: pointer;
+            }
+
+            .action:disabled {
+                opacity: 0.5;
+                cursor: default;
+            }
+
+            .action:focus-visible {
+                outline: 2px solid var(--primary-color);
+                outline-offset: 2px;
+            }
+
+            .bar {
+                display: flex;
+                gap: 3px;
+                margin: 8px 16px 0;
+            }
+
+            /* Waiting and not run: a grey that shows on light and dark themes alike. */
+            .seg {
+                flex: 1 1 0;
+                height: 4px;
+                border-radius: 2px;
+                background: color-mix(in srgb, var(--secondary-text-color) 35%, transparent);
+            }
+
+            .seg.running {
+                background: var(--primary-color);
+                opacity: 0.6;
+            }
+
+            .seg.done {
+                background: var(--success-color, #43a047);
+            }
+
+            .seg.failed {
+                background: var(--error-color, #db4437);
+            }
+
             .hd-title {
                 flex: 1 1 auto;
                 min-width: 0;
@@ -1284,7 +1505,13 @@ var WudQueueCard = class extends i4 {
                 line-height: 1.4;
             }
 
-            .hd-sub,
+            /* The status line reads the same in every state, in the text colour. The rows show the colours. */
+            .hd-sub {
+                padding: 0 16px;
+                font-size: 12px;
+                color: var(--primary-text-color);
+            }
+
             .message {
                 padding: 0 16px;
                 font-size: 12px;
@@ -1293,14 +1520,6 @@ var WudQueueCard = class extends i4 {
 
             .message {
                 padding: 4px 16px 14px;
-            }
-
-            .hd-sub.running {
-                color: var(--primary-color);
-            }
-
-            .hd-sub.failed {
-                color: var(--error-color, #db4437);
             }
 
             .list {
@@ -1327,6 +1546,10 @@ var WudQueueCard = class extends i4 {
                 overscroll-behavior: contain;
                 scrollbar-width: thin;
                 padding-bottom: 4px;
+            }
+
+            .sliding .scroll {
+                overflow-y: hidden;
             }
 
             .row {
@@ -1429,8 +1652,8 @@ var WudQueueCard = class extends i4 {
                 border-radius: 50%;
                 border: 0;
                 padding: 0;
-                background: var(--wq-soft);
-                color: var(--primary-color);
+                background: color-mix(in srgb, var(--primary-color) 30%, transparent);
+                color: var(--primary-text-color);
                 display: grid;
                 place-items: center;
                 cursor: pointer;
@@ -1459,6 +1682,12 @@ var WudQueueCard = class extends i4 {
             .pill.running {
                 background: var(--wq-soft);
                 color: var(--primary-color);
+            }
+
+            .pill.queued,
+            .pill.not_run {
+                background: var(--wq-track);
+                color: var(--secondary-text-color);
             }
 
             .pill.done {
@@ -1651,6 +1880,12 @@ __decorateClass([
 __decorateClass([
   r5()
 ], WudQueueCard.prototype, "now", 2);
+__decorateClass([
+  r5()
+], WudQueueCard.prototype, "acting", 2);
+__decorateClass([
+  r5()
+], WudQueueCard.prototype, "sliding", 2);
 WudQueueCard = __decorateClass([
   t3("wud-queue-card")
 ], WudQueueCard);
