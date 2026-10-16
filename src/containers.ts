@@ -74,9 +74,10 @@ export function containerOf(entity: HassEntity): Container | undefined {
         installed: text(a.installed_version),
         latest: text(a.latest_version),
         pending: entity.state === "on",
-        // WUD sets this while it installs. Home Assistant may also report a percentage, which WUD never sends. After
-        // WUD has replaced itself its entity keeps saying so, so only a container still without its update counts.
-        installing: entity.state === "on" && (a.in_progress === true || typeof a.in_progress === "number"),
+        // WUD sets this while it installs. Home Assistant turns a percentage into true, and gives the number as
+        // update_percentage. After WUD has replaced itself its entity keeps saying so, so only a container still without
+        // its update counts.
+        installing: entity.state === "on" && a.in_progress === true,
     };
 }
 

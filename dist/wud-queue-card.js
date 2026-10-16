@@ -1,4 +1,4 @@
-/*! wud-queue-card 1.0.1 | MIT License */
+/*! wud-queue-card 1.0.2 | MIT License */
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __decorateClass = (decorators, target, key, kind) => {
@@ -604,7 +604,7 @@ function r5(r6) {
 }
 
 // src/const.ts
-var CARD_VERSION = "1.0.1";
+var CARD_VERSION = "1.0.2";
 var START_TIMEOUT = 6e4;
 var VERSION_GRACE = 12e4;
 var DONE_KEEP = 6e5;
@@ -647,9 +647,10 @@ function containerOf(entity) {
     installed: text(a3.installed_version),
     latest: text(a3.latest_version),
     pending: entity.state === "on",
-    // WUD sets this while it installs. Home Assistant may also report a percentage, which WUD never sends. After
-    // WUD has replaced itself its entity keeps saying so, so only a container still without its update counts.
-    installing: entity.state === "on" && (a3.in_progress === true || typeof a3.in_progress === "number")
+    // WUD sets this while it installs. Home Assistant turns a percentage into true, and gives the number as
+    // update_percentage. After WUD has replaced itself its entity keeps saying so, so only a container still without
+    // its update counts.
+    installing: entity.state === "on" && a3.in_progress === true
   };
 }
 function byName(a3, b3) {
