@@ -216,6 +216,21 @@ describe("installs over time", () => {
         expect(shadow(element).querySelector(".errline")?.textContent).toContain("Action update.install not found");
     });
 
+    it("drop a refusal once the row has been installed some other way", async () => {
+        const state = hass();
+        state.callService = async () => {
+            throw new Error("Update is already in progress");
+        };
+        const element = await card(state);
+        await pressPlayer(element);
+        await new Promise((resolve) => setTimeout(resolve));
+        await element.updateComplete;
+        element.hass = hass(withPlayer("1.5.0", "1.5.0"));
+        await element.updateComplete;
+        expect(row(shadow(element), "player")?.querySelector(".pill")?.textContent).toBe("Päivitetty");
+        expect(shadow(element).querySelector(".errline")).toBeNull();
+    });
+
     it("show a finished row as updated, then as waiting again when an even newer version comes out", async () => {
         const element = await card(hass());
         await pressPlayer(element);
@@ -376,7 +391,7 @@ describe("with the WUD Queue integration", () => {
         expect(row(shadow(element), "player")).toBeUndefined();
     });
 
-    it("shows its own refused queuing over an older run's word on the row", async () => {
+    it("leaves a refused queuing to Home Assistant's notice, and the row to what the queue says", async () => {
         const state = withQueue(hass(), {
             state: "failed",
             items: [item("player", "failed", ["update.media_player"], { reason: "version" })],
@@ -388,7 +403,56 @@ describe("with the WUD Queue integration", () => {
         row(shadow(element), "player")?.querySelector<HTMLButtonElement>("button.install")?.click();
         await new Promise((resolve) => setTimeout(resolve));
         await element.updateComplete;
-        expect(shadow(element).querySelector(".errline")?.textContent).toContain("The queue is stopping");
+        const error = shadow(element).querySelector(".errline")?.textContent ?? "";
+        expect(error).not.toContain("The queue is stopping");
+        expect(error).toContain("yhä versiossa 1.4.0");
+    });
+
+    it("locks the row buttons until Home Assistant has answered a queuing, so a double click sends one", async () => {
+        const calls: unknown[][] = [];
+        let answer: () => void = () => undefined;
+        const state = withQueue(hass(), { items: [] });
+        state.callService = (...args: unknown[]) => {
+            calls.push(args);
+            return new Promise<undefined>((resolve) => (answer = () => resolve(undefined)));
+        };
+        const element = await card(state);
+        await pressPlayer(element);
+        await pressPlayer(element);
+        expect(calls).toHaveLength(1);
+        expect(row(shadow(element), "app")?.querySelector<HTMLButtonElement>("button.install")?.disabled).toBe(true);
+        answer();
+        await new Promise((resolve) => setTimeout(resolve));
+        await element.updateComplete;
+        expect(row(shadow(element), "app")?.querySelector<HTMLButtonElement>("button.install")?.disabled).toBe(false);
+    });
+
+    it("installs nothing while the queue's sensor is away, rather than going around the queue", async () => {
+        const calls: unknown[][] = [];
+        const state = withQueue(hass(sample(), calls), { items: [] });
+        state.states["sensor.wud_queue"] = { entity_id: "sensor.wud_queue", state: "unavailable", last_changed: "", attributes: {} };
+        const element = await card(state);
+        expect(row(shadow(element), "player")?.querySelector<HTMLButtonElement>("button.install")?.disabled).toBe(true);
+        expect(action(shadow(element))).toBeNull();
+    });
+
+    it("shows a failed row as updated once it has its version, and offers to clear a run with nothing left to retry", async () => {
+        const calls: unknown[][] = [];
+        const updated = sample().map((e) =>
+            e.entity_id === "update.media_player"
+                ? entity("update.media_player", { stack: "media", service: "player", image: "example/player", installed: "1.5.0" })
+                : e,
+        );
+        const failed = item("player", "failed", ["update.media_player"], {
+            reason: "version",
+            entities: [{ entity_id: "update.media_player", from: "1.4.0", to: "1.5.0", status: "failed" }],
+        });
+        const root = shadow(await card(withQueue(hass(updated, calls), { state: "failed", items: [failed] })));
+        expect(row(root, "player")?.querySelector(".pill")?.textContent).toBe("Päivitetty");
+        expect(root.querySelector(".errline")).toBeNull();
+        expect(action(root)?.textContent).toBe("Kuittaa");
+        action(root)?.click();
+        expect(calls).toEqual([["wud_queue", "clear", {}]]);
     });
 
     it("locks the row buttons while the queue stops", async () => {

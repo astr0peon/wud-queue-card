@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
 import { START_TIMEOUT, VERSION_GRACE } from "../src/const";
-import { containerOf, follow, projectsOf, selectedEntities, servicesDone } from "../src/containers";
+import { containerOf, follow, followQueue, projectsOf, retryable, selectedEntities, servicesDone, wudEntities } from "../src/containers";
 import type { Install } from "../src/containers";
-import type { Container, Unit } from "../src/types";
+import type { Container, Queue, QueueItem, Unit } from "../src/types";
 import { entity, hass, sample } from "./fixtures";
 
 function containers(list = sample()): Container[] {
@@ -16,6 +16,8 @@ describe("which entities are shown", () => {
         expect(ids).toContain("update.web_site_a");
         expect(ids).toContain("update.cache");
         expect(ids).not.toContain("update.wud_helper");
+        // The editor's pickers don't offer it either.
+        expect(wudEntities(hass())).not.toContain("update.wud_helper");
     });
 
     it("keeps to one device's entities", () => {
@@ -195,6 +197,16 @@ describe("following an install", () => {
         const refused = follow(unit("1.0"), { ...install, error: "Service not found" }, T + 1000);
         expect(refused.status).toBe("failed");
         expect(refused.reason).toBe("service");
+        // Installed some other way since, it is done all the same.
+        expect(follow(unit("2.0"), { ...install, error: "Service not found" }, T + 2000).status).toBe("done");
+    });
+
+    it("doesn't take WUD's word that it installs a container already on its new version", () => {
+        // WUD leaves its own entity installing after it has replaced itself.
+        const stuck = entity("update.wud", { stack: "wud", image: "getwud/wud", installed: "9.5.0", installing: true });
+        expect(containerOf(stuck)?.installing).toBe(false);
+        const busy = entity("update.wud", { stack: "wud", image: "getwud/wud", installed: "9.4.1", latest: "9.5.0", installing: true });
+        expect(containerOf(busy)?.installing).toBe(true);
     });
 
     it("notes when it was done, so the card can forget it later", () => {
@@ -206,5 +218,59 @@ describe("following an install", () => {
         const targets = Object.fromEntries(web.units[0].containers.map((c) => [c.entity_id, "26.1.0"]));
         targets["update.web_site_c"] = "26.2.0";
         expect(servicesDone(web.units[0], { at: 0, from: {}, targets, started: true })).toBe(2);
+    });
+});
+
+describe("following the queue", () => {
+    function queueItem(status: QueueItem["status"], to: string, extra: Partial<QueueItem> = {}): QueueItem {
+        return {
+            name: "player",
+            status,
+            reason: null,
+            error: null,
+            entities: [{ entity_id: "update.media_player", from: "1.4.0", to, status }],
+            ...extra,
+        };
+    }
+
+    function player(list = sample()): Unit {
+        const [media] = projectsOf(containers(list)).filter((p) => p.name === "media");
+        return media.units.find((u) => u.name === "player") as Unit;
+    }
+
+    it("goes by the row's latest item, with its versions and its reason", () => {
+        const queue: Queue = {
+            state: "failed",
+            stopping: false,
+            items: [queueItem("done", "1.4.0"), queueItem("failed", "1.5.0", { reason: "timeout", error: "took too long" })],
+        };
+        const followed = followQueue(player(), queue);
+        expect(followed?.status).toBe("failed");
+        expect(followed?.reason).toBe("timeout");
+        expect(followed?.install.error).toBe("took too long");
+        expect(followed?.install.from["update.media_player"]).toBe("1.4.0");
+        expect(followed?.install.targets["update.media_player"]).toBe("1.5.0");
+        expect(followQueue(player(), { ...queue, items: [] })).toBeUndefined();
+    });
+
+    it("calls a failed row done once its containers are on the item's versions", () => {
+        const updated = sample().map((e) =>
+            e.entity_id === "update.media_player"
+                ? entity("update.media_player", { stack: "media", service: "player", image: "example/player", installed: "1.5.0" })
+                : e,
+        );
+        const queue: Queue = { state: "failed", stopping: false, items: [queueItem("failed", "1.5.0", { reason: "version" })] };
+        const followed = followQueue(player(updated), queue);
+        expect(followed?.status).toBe("done");
+        expect(followed?.reason).toBeUndefined();
+    });
+
+    it("has something to retry only while a container of an unfinished item still has its update", () => {
+        const queue: Queue = { state: "failed", stopping: false, items: [queueItem("failed", "1.5.0")] };
+        expect(retryable(hass(), queue)).toBe(true);
+        const state = hass();
+        (state.states["update.media_player"] as { state: string }).state = "off";
+        expect(retryable(state, queue)).toBe(false);
+        expect(retryable(hass(), { ...queue, items: [queueItem("done", "1.5.0")] })).toBe(false);
     });
 });

@@ -585,6 +585,185 @@
                     "update.vaultwarden"
                 ]
             }
+        },
+        {
+            "name": "narrow",
+            "width": 240,
+            "card": {
+                "type": "custom:wud-queue-card",
+                "entities": [
+                    "update.shop_api",
+                    "update.shop_worker",
+                    "update.shop_scheduler",
+                    "update.shop_mailer",
+                    "update.shop_webhooks",
+                    "update.shop_db",
+                    "update.media_jellyfin",
+                    "update.media_jellyseerr",
+                    "update.uptime_kuma",
+                    "update.wud",
+                    "update.monitoring_grafana",
+                    "update.monitoring_prometheus",
+                    "update.mosquitto",
+                    "update.paperless_webserver",
+                    "update.paperless_broker",
+                    "update.vaultwarden"
+                ]
+            },
+            "states": {
+                "update.media_jellyfin": {
+                    "state": "off",
+                    "attributes": {
+                        "friendly_name": "jellyfin",
+                        "installed_version": "10.11.3",
+                        "latest_version": "10.11.3",
+                        "in_progress": false,
+                        "watcher": "local",
+                        "stack": "media",
+                        "name": "media-jellyfin-1",
+                        "display_name": "media-jellyfin-1",
+                        "image_name": "jellyfin/jellyfin",
+                        "labels_com_docker_compose_service": "jellyfin",
+                        "labels_com_docker_compose_project": "media"
+                    }
+                },
+                "update.shop_api": {
+                    "state": "off",
+                    "attributes": {
+                        "friendly_name": "api",
+                        "installed_version": "24.11.0-alpine",
+                        "latest_version": "24.11.0-alpine",
+                        "in_progress": false,
+                        "watcher": "local",
+                        "stack": "shop",
+                        "name": "shop-api-1",
+                        "display_name": "shop-api-1",
+                        "image_name": "library/node",
+                        "labels_com_docker_compose_service": "api",
+                        "labels_com_docker_compose_project": "shop"
+                    }
+                },
+                "update.shop_worker": {
+                    "state": "off",
+                    "attributes": {
+                        "friendly_name": "worker",
+                        "installed_version": "24.11.0-alpine",
+                        "latest_version": "24.11.0-alpine",
+                        "in_progress": false,
+                        "watcher": "local",
+                        "stack": "shop",
+                        "name": "shop-worker-1",
+                        "display_name": "shop-worker-1",
+                        "image_name": "library/node",
+                        "labels_com_docker_compose_service": "worker",
+                        "labels_com_docker_compose_project": "shop"
+                    }
+                },
+                "update.shop_scheduler": {
+                    "state": "on",
+                    "attributes": {
+                        "friendly_name": "scheduler",
+                        "installed_version": "24.10.0-alpine",
+                        "latest_version": "24.11.0-alpine",
+                        "in_progress": true,
+                        "watcher": "local",
+                        "stack": "shop",
+                        "name": "shop-scheduler-1",
+                        "display_name": "shop-scheduler-1",
+                        "image_name": "library/node",
+                        "labels_com_docker_compose_service": "scheduler",
+                        "labels_com_docker_compose_project": "shop"
+                    }
+                },
+                "sensor.wud_queue": {
+                    "state": "running",
+                    "attributes": {
+                        "items": [
+                            {
+                                "name": "jellyfin",
+                                "status": "done",
+                                "reason": null,
+                                "error": null,
+                                "entities": [
+                                    {
+                                        "entity_id": "update.media_jellyfin",
+                                        "from": "10.11.2",
+                                        "to": "10.11.3",
+                                        "status": "done"
+                                    }
+                                ]
+                            },
+                            {
+                                "name": "node",
+                                "status": "running",
+                                "reason": null,
+                                "error": null,
+                                "entities": [
+                                    {
+                                        "entity_id": "update.shop_api",
+                                        "from": "24.10.0-alpine",
+                                        "to": "24.11.0-alpine",
+                                        "status": "done"
+                                    },
+                                    {
+                                        "entity_id": "update.shop_worker",
+                                        "from": "24.10.0-alpine",
+                                        "to": "24.11.0-alpine",
+                                        "status": "done"
+                                    },
+                                    {
+                                        "entity_id": "update.shop_scheduler",
+                                        "from": "24.10.0-alpine",
+                                        "to": "24.11.0-alpine",
+                                        "status": "running"
+                                    },
+                                    {
+                                        "entity_id": "update.shop_mailer",
+                                        "from": "24.10.0-alpine",
+                                        "to": "24.11.0-alpine",
+                                        "status": "queued"
+                                    },
+                                    {
+                                        "entity_id": "update.shop_webhooks",
+                                        "from": "24.10.0-alpine",
+                                        "to": "24.11.0-alpine",
+                                        "status": "queued"
+                                    }
+                                ]
+                            },
+                            {
+                                "name": "uptime-kuma",
+                                "status": "queued",
+                                "reason": null,
+                                "error": null,
+                                "entities": [
+                                    {
+                                        "entity_id": "update.uptime_kuma",
+                                        "from": "2.0.1",
+                                        "to": "2.0.2",
+                                        "status": "queued"
+                                    }
+                                ]
+                            },
+                            {
+                                "name": "wud",
+                                "status": "queued",
+                                "reason": null,
+                                "error": null,
+                                "entities": [
+                                    {
+                                        "entity_id": "update.wud",
+                                        "from": "9.4.1",
+                                        "to": "9.5.0",
+                                        "status": "queued"
+                                    }
+                                ]
+                            }
+                        ],
+                        "stopping": false
+                    }
+                }
+            }
         }
     ]
 }

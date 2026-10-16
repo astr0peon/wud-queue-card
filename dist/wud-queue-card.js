@@ -1,4 +1,4 @@
-/*! wud-queue-card 1.0.0 | MIT License */
+/*! wud-queue-card 1.0.1 | MIT License */
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __decorateClass = (decorators, target, key, kind) => {
@@ -604,7 +604,7 @@ function r5(r6) {
 }
 
 // src/const.ts
-var CARD_VERSION = "1.0.0";
+var CARD_VERSION = "1.0.1";
 var START_TIMEOUT = 6e4;
 var VERSION_GRACE = 12e4;
 var DONE_KEEP = 6e5;
@@ -618,7 +618,7 @@ function isSelfUpdateHelper(entity) {
   return /-self-update-\d+$/.test(String(entity.attributes.name ?? ""));
 }
 function wudEntities(hass, device) {
-  return Object.keys(hass.states).filter((id) => isWud(hass.states[id])).filter((id) => !device || hass.entities?.[id]?.device_id === device).sort();
+  return Object.keys(hass.states).filter((id) => isWud(hass.states[id]) && !isSelfUpdateHelper(hass.states[id])).filter((id) => !device || hass.entities?.[id]?.device_id === device).sort();
 }
 function selectedEntities(hass, config) {
   const exclude = new Set(config.exclude ?? []);
@@ -647,8 +647,9 @@ function containerOf(entity) {
     installed: text(a3.installed_version),
     latest: text(a3.latest_version),
     pending: entity.state === "on",
-    // WUD sets this while it installs. Home Assistant may also report a percentage, which WUD never sends.
-    installing: a3.in_progress === true || typeof a3.in_progress === "number"
+    // WUD sets this while it installs. Home Assistant may also report a percentage, which WUD never sends. After
+    // WUD has replaced itself its entity keeps saying so, so only a container still without its update counts.
+    installing: entity.state === "on" && (a3.in_progress === true || typeof a3.in_progress === "number")
   };
 }
 function byName(a3, b3) {
@@ -700,11 +701,11 @@ function follow(unit, install, now) {
   const started = install.started || unit.installing;
   const ended = unit.installing ? void 0 : started ? install.ended ?? now : void 0;
   const next = { ...install, started, ended };
-  if (install.error !== void 0) {
-    return { install: next, status: "failed", reason: "service" };
-  }
   if (unit.containers.every((c4) => c4.installed === install.targets[c4.entity_id])) {
     return { install: { ...next, ended: install.ended ?? ended ?? now }, status: "done" };
+  }
+  if (install.error !== void 0) {
+    return { install: next, status: "failed", reason: "service" };
   }
   if (unit.installing) {
     return { install: next, status: "running" };
@@ -727,7 +728,6 @@ function queueOf(hass) {
     return void 0;
   }
   return {
-    entity_id: state.entity_id,
     state: state.state,
     stopping: state.attributes.stopping === true,
     items: state.attributes.items
@@ -744,10 +744,19 @@ function followQueue(unit, queue) {
     at: 0,
     from: Object.fromEntries(unit.containers.map((c4) => [c4.entity_id, versions.get(c4.entity_id)?.from ?? c4.installed])),
     targets: Object.fromEntries(unit.containers.map((c4) => [c4.entity_id, versions.get(c4.entity_id)?.to ?? c4.installed])),
-    started: true,
-    ...item.error ? { error: item.error } : {}
+    started: true
   };
-  return { install, status: item.status, ...item.reason ? { reason: item.reason } : {} };
+  if (unit.containers.every((c4) => c4.installed === install.targets[c4.entity_id])) {
+    return { install, status: "done" };
+  }
+  return {
+    install: { ...install, ...item.error ? { error: item.error } : {} },
+    status: item.status,
+    ...item.reason ? { reason: item.reason } : {}
+  };
+}
+function retryable(hass, queue) {
+  return queue.items.some((item) => item.status !== "done" && item.entities.some((e5) => hass.states[e5.entity_id]?.state === "on"));
 }
 
 // src/localize/languages/en.json
@@ -967,6 +976,9 @@ registry.customCards.push({
   documentationURL: "https://github.com/jesmak/wud-queue-card",
   preview: true
 });
+function running(unit, followed) {
+  return unit.installing || followed.get(unit.key)?.status === "running";
+}
 var WudQueueCard = class extends i4 {
   constructor() {
     super(...arguments);
@@ -978,6 +990,8 @@ var WudQueueCard = class extends i4 {
     this.sliding = false;
     /** How each remembered install is going, worked out once per update. */
     this.followed = /* @__PURE__ */ new Map();
+    /** The projects to show, worked out once per update. */
+    this.projectList = [];
     this.slid = (event) => {
       if (event.propertyName === "grid-template-rows" && event.target === event.currentTarget) {
         window.clearTimeout(this.slideTimer);
@@ -1054,7 +1068,8 @@ var WudQueueCard = class extends i4 {
    * comes out, and a finished one after `DONE_KEEP`.
    */
   willUpdate() {
-    const units = new Map(this.projects().flatMap((p3) => p3.units.map((u3) => [u3.key, u3])));
+    this.projectList = this.projects();
+    const units = new Map(this.projectList.flatMap((p3) => p3.units.map((u3) => [u3.key, u3])));
     const pending = [...units.values()].some((u3) => u3.pending);
     if (this.hadPending === false && pending) {
       this.open = void 0;
@@ -1079,7 +1094,7 @@ var WudQueueCard = class extends i4 {
     if (queue) {
       for (const [key, unit] of units) {
         const followed = followQueue(unit, queue);
-        if (followed && this.followed.get(key)?.install.error === void 0) {
+        if (followed) {
           this.followed.set(key, followed);
         }
       }
@@ -1096,7 +1111,7 @@ var WudQueueCard = class extends i4 {
     if (!this.hass || !this.config) {
       return A;
     }
-    const projects = this.projects();
+    const projects = this.projectList;
     const title = this.config.title ?? this.text("common.title");
     if (projects.length === 0) {
       return b2`<ha-card>
@@ -1112,7 +1127,7 @@ var WudQueueCard = class extends i4 {
     const pendingUnits = pendingProjects.flatMap((p3) => p3.units).filter(active);
     const currentCount = currentProjects.reduce((n5, p3) => n5 + p3.units.length, 0);
     const open = this.open === "current" ? "current" : pendingUnits.length > 0 ? "pending" : "none";
-    const busy = queue ? queue.stopping : pendingUnits.some((u3) => u3.installing || followed.get(u3.key)?.status === "running");
+    const busy = queueEntityId(this.hass) !== void 0 ? !queue || queue.stopping || this.acting : pendingUnits.some((u3) => running(u3, followed));
     const height = this.config.height ? `height:${this.config.height}px` : "";
     return b2`
             <ha-card style=${height} class=${this.sliding ? "sliding" : ""}>
@@ -1149,9 +1164,9 @@ var WudQueueCard = class extends i4 {
   }
   /** One line under the title: what is going on, or what is waiting. */
   statusLine(units, followed, queue) {
-    const running = units.filter((u3) => u3.installing || followed.get(u3.key)?.status === "running");
-    if (running.length > 0) {
-      const names = running.map((u3) => u3.name).join(", ");
+    const installing = units.filter((u3) => running(u3, followed));
+    if (installing.length > 0) {
+      const names = installing.map((u3) => u3.name).join(", ");
       return b2`<div class="hd-sub">${this.text("common.updating", { name: names })}</div>`;
     }
     const failed = units.filter((u3) => followed.get(u3.key)?.status === "failed");
@@ -1178,12 +1193,7 @@ var WudQueueCard = class extends i4 {
   }
   currentProject(project) {
     if (project.units.length === 1) {
-      const unit = project.units[0];
-      return b2`<div class="row muted" role="button" tabindex="0" @click=${() => this.moreInfo(unit)} @keydown=${this.onKey(unit)}>
-                <ha-icon class="ico" icon="mdi:docker"></ha-icon>
-                <div class="info"><div class="name">${unit.name}${this.serviceCount(unit)}</div></div>
-                <div class="end"><span class="ver">${unit.containers[0].installed}</span></div>
-            </div>`;
+      return this.siblingRow(project.units[0], false);
     }
     return b2`<div class="proj">
             ${this.projectLabel(project, true)}
@@ -1235,9 +1245,15 @@ var WudQueueCard = class extends i4 {
                       </div>` : A}
         `;
   }
-  /** An up-to-date row in a project's group: a thin line with its version. */
-  siblingRow(unit) {
-    return b2`<div class="row sib muted" role="button" tabindex="0" @click=${() => this.moreInfo(unit)} @keydown=${this.onKey(unit)}>
+  /** An up-to-date row with its version: a thin line in a project's group, or a project of its own. */
+  siblingRow(unit, inGroup = true) {
+    return b2`<div
+            class="row ${inGroup ? "sib" : ""} muted"
+            role="button"
+            tabindex="0"
+            @click=${() => this.moreInfo(unit)}
+            @keydown=${this.onKey(unit)}
+        >
             <ha-icon class="ico" icon="mdi:docker"></ha-icon>
             <div class="info"><div class="name">${unit.name}${this.serviceCount(unit)}</div></div>
             <div class="end"><span class="ver">${unit.containers[0].installed}</span></div>
@@ -1289,7 +1305,7 @@ var WudQueueCard = class extends i4 {
   }
   /** On the closed row of waiting updates: whether something is installing or has failed. */
   sectionPill(units, followed) {
-    if (units.some((u3) => u3.installing || followed.get(u3.key)?.status === "running")) {
+    if (units.some((u3) => running(u3, followed))) {
       return b2`<span class="pill running">${this.text("status.running")}</span>`;
     }
     if (units.some((u3) => followed.get(u3.key)?.status === "failed")) {
@@ -1303,27 +1319,23 @@ var WudQueueCard = class extends i4 {
       return;
     }
     const pending = unit.containers.filter((c4) => c4.pending);
+    if (queueEntityId(this.hass) !== void 0) {
+      const installs = new Map(this.installs);
+      installs.delete(unit.key);
+      this.installs = installs;
+      this.call("enqueue", { entity_id: pending.map((c4) => c4.entity_id) });
+      return;
+    }
     const install = {
       at: Date.now(),
       from: Object.fromEntries(unit.containers.map((c4) => [c4.entity_id, c4.installed])),
       targets: Object.fromEntries(unit.containers.map((c4) => [c4.entity_id, c4.pending ? c4.latest : c4.installed])),
       started: false
     };
-    const queued = queueOf(this.hass) !== void 0;
-    const installs = new Map(this.installs);
-    if (queued) {
-      installs.delete(unit.key);
-    } else {
-      installs.set(unit.key, install);
-    }
-    this.installs = installs;
+    this.installs = new Map(this.installs).set(unit.key, install);
     this.now = Date.now();
     try {
-      if (queued) {
-        await this.hass.callService("wud_queue", "enqueue", { entity_id: pending.map((c4) => c4.entity_id) });
-      } else {
-        await this.hass.callService("update", "install", {}, { entity_id: pending.map((c4) => c4.entity_id) });
-      }
+      await this.hass.callService("update", "install", {}, { entity_id: pending.map((c4) => c4.entity_id) });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error?.message ?? error);
       this.installs = new Map(this.installs).set(unit.key, { ...install, error: message });
@@ -1348,7 +1360,7 @@ var WudQueueCard = class extends i4 {
       );
     }
     if (queue.state === "failed") {
-      return this.actionButton(this.text("common.retry"), false, () => this.call("retry"));
+      return this.hass && retryable(this.hass, queue) ? this.actionButton(this.text("common.retry"), false, () => this.call("retry")) : this.actionButton(this.text("common.clear"), false, () => this.call("clear"));
     }
     const waiting = units.filter((u3) => u3.pending && !["queued", "running"].includes(followed.get(u3.key)?.status ?? "")).flatMap((u3) => u3.containers.filter((c4) => c4.pending).map((c4) => c4.entity_id));
     if (waiting.length > 0) {
@@ -1513,13 +1525,9 @@ var WudQueueCard = class extends i4 {
             }
 
             .message {
-                padding: 0 16px;
+                padding: 4px 16px 14px;
                 font-size: 12px;
                 color: var(--secondary-text-color);
-            }
-
-            .message {
-                padding: 4px 16px 14px;
             }
 
             .list {
@@ -1620,9 +1628,9 @@ var WudQueueCard = class extends i4 {
                 font-weight: 500;
             }
 
+            /* Never squeezed below its pill or button. A long version wraps within its half of the row instead. */
             .end {
-                flex: 0 1 auto;
-                min-width: 0;
+                flex: none;
                 max-width: 50%;
                 text-align: right;
                 display: flex;

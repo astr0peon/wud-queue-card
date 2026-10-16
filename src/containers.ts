@@ -33,7 +33,7 @@ function isSelfUpdateHelper(entity: HassEntity): boolean {
 /** Every WUD update entity, for the editor and for a card set to find them itself. */
 export function wudEntities(hass: HomeAssistant, device?: string): string[] {
     return Object.keys(hass.states)
-        .filter((id) => isWud(hass.states[id]))
+        .filter((id) => isWud(hass.states[id]) && !isSelfUpdateHelper(hass.states[id] as HassEntity))
         .filter((id) => !device || hass.entities?.[id]?.device_id === device)
         .sort();
 }
@@ -74,8 +74,9 @@ export function containerOf(entity: HassEntity): Container | undefined {
         installed: text(a.installed_version),
         latest: text(a.latest_version),
         pending: entity.state === "on",
-        // WUD sets this while it installs. Home Assistant may also report a percentage, which WUD never sends.
-        installing: a.in_progress === true || typeof a.in_progress === "number",
+        // WUD sets this while it installs. Home Assistant may also report a percentage, which WUD never sends. After
+        // WUD has replaced itself its entity keeps saying so, so only a container still without its update counts.
+        installing: entity.state === "on" && (a.in_progress === true || typeof a.in_progress === "number"),
     };
 }
 
@@ -180,12 +181,13 @@ export function follow(unit: Unit, install: Install, now: number): Followed {
     const ended = unit.installing ? undefined : started ? (install.ended ?? now) : undefined;
     const next: Install = { ...install, started, ended };
 
-    if (install.error !== undefined) {
-        return { install: next, status: "failed", reason: "service" };
-    }
+    // Checked before a refusal, as the row may have been installed some other way since, such as from Home Assistant.
     if (unit.containers.every((c) => c.installed === install.targets[c.entity_id])) {
         // The first time it is seen done stays, so that the card can forget it a while later.
         return { install: { ...next, ended: install.ended ?? ended ?? now }, status: "done" };
+    }
+    if (install.error !== undefined) {
+        return { install: next, status: "failed", reason: "service" };
     }
     if (unit.installing) {
         return { install: next, status: "running" };
@@ -209,7 +211,7 @@ export function queueEntityId(hass: HomeAssistant): string | undefined {
     return Object.entries(hass.entities ?? {}).find(([id, e]) => e?.platform === "wud_queue" && id.startsWith("sensor."))?.[0];
 }
 
-/** The WUD Queue integration's queue. */
+/** The WUD Queue integration's queue, or nothing while its sensor is unavailable or the integration isn't there. */
 export function queueOf(hass: HomeAssistant): Queue | undefined {
     const id = queueEntityId(hass);
     const state = id && hass.states[id];
@@ -217,7 +219,6 @@ export function queueOf(hass: HomeAssistant): Queue | undefined {
         return undefined;
     }
     return {
-        entity_id: state.entity_id,
         state: state.state as Queue["state"],
         stopping: state.attributes.stopping === true,
         items: state.attributes.items as Queue["items"],
@@ -240,7 +241,19 @@ export function followQueue(unit: Unit, queue: Queue): Followed | undefined {
         from: Object.fromEntries(unit.containers.map((c) => [c.entity_id, versions.get(c.entity_id)?.from ?? c.installed])),
         targets: Object.fromEntries(unit.containers.map((c) => [c.entity_id, versions.get(c.entity_id)?.to ?? c.installed])),
         started: true,
-        ...(item.error ? { error: item.error } : {}),
     };
-    return { install, status: item.status as RowStatus, ...(item.reason ? { reason: item.reason } : {}) };
+    // The versions win over the queue's word: WUD may tell of a new version only after the queue has given up on it.
+    if (unit.containers.every((c) => c.installed === install.targets[c.entity_id])) {
+        return { install, status: "done" };
+    }
+    return {
+        install: { ...install, ...(item.error ? { error: item.error } : {}) },
+        status: item.status as RowStatus,
+        ...(item.reason ? { reason: item.reason } : {}),
+    };
+}
+
+/** Whether a failed or stopped queue has something left to try again: a container that still has its update. */
+export function retryable(hass: HomeAssistant, queue: Queue): boolean {
+    return queue.items.some((item) => item.status !== "done" && item.entities.some((e) => hass.states[e.entity_id]?.state === "on"));
 }

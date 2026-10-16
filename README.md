@@ -72,18 +72,18 @@ trigger. Without one, WUD receives the install and does nothing.
 
 The card tells a finished install from a failed one by the container's new version, which WUD notices right away from
 Docker's events. Keep `WUD_WATCHER_<name>_WATCHEVENTS` at its default, `true`. Without the events WUD sees the new
-version only at its next scheduled watch, and the card shows an install that worked as failed.
+version only at its next scheduled watch, and until then the card shows an install that worked as failed.
 
 ## Options
 
-| Name       | Type   | Default                       | Description                                                                         |
-| ---------- | ------ | ----------------------------- | ----------------------------------------------------------------------------------- |
-| `type`     | string | required                      | `custom:wud-queue-card`                                                             |
-| `title`    | string | Docker containers, translated | Shown at the top of the card                                                        |
-| `device`   | string | every WUD update entity       | The id of a WUD device, such as `wud (local)`, whose update entities the card shows |
-| `entities` | list   | found by the card             | The update entities to show, instead of the card finding them                       |
-| `exclude`  | list   |                               | Update entities never shown, whether found or listed                                |
-| `height`   | number | fits the content              | The card's height in pixels. The open list scrolls inside it                        |
+| Name       | Type   | Default                       | Description                                                   |
+| ---------- | ------ | ----------------------------- | ------------------------------------------------------------- |
+| `type`     | string | required                      | `custom:wud-queue-card`                                       |
+| `title`    | string | Docker containers, translated | Shown at the top of the card                                  |
+| `device`   | string | every WUD update entity       | The id of a WUD device, whose update entities the card shows  |
+| `entities` | list   | found by the card             | The update entities to show, instead of the card finding them |
+| `exclude`  | list   |                               | Update entities never shown, whether found or listed          |
+| `height`   | number | fits the content              | The card's height in pixels. The open list scrolls inside it  |
 
 Every option is in the visual editor. Without `device` or `entities`, the card shows every update entity WUD has
 made, from all its watchers. WUD makes a device per watcher, so `device` limits the card to one Docker host. The
@@ -126,7 +126,8 @@ The row shows its progress while the card is open:
 - **Updated**, with the version it moved from, once every container is on its new version.
 - **Failed**, with the reason, when Home Assistant refuses to send the install, when WUD hasn't started it within a
   minute, or when it has finished but the container is still on its old version two minutes later. WUD's own log has
-  the details. The install button comes back, so the row can be tried again.
+  the details. The install button comes back, so the row can be tried again. A row that gets its new version some
+  other way meanwhile shows as updated after all.
 
 An updated row stays in the waiting list for ten minutes, or until an even newer version comes out, and then moves
 to the up-to-date list. The card remembers only the installs it started, and only until the page is reloaded. An
@@ -135,7 +136,9 @@ its outcome isn't followed.
 
 ### With the WUD Queue integration
 
-The install buttons add their rows to the queue instead, and stay usable while it runs. A thin bar under the title
+The install buttons add their rows to the queue instead, and stay usable while it runs. They pause while the queue
+stops, while a row is being added, and while the integration starts up, so nothing goes around the queue. When the
+queue refuses a row, Home Assistant's own notice says why. A thin bar under the title
 has a segment for each row in the queue, and the rows show **Queued**, **Updating**, **Updated**, **Failed** or
 **Not installed**. The button in the header does what fits the moment:
 
@@ -143,7 +146,11 @@ has a segment for each row in the queue, and the rows show **Queued**, **Updatin
 - **Stop queue** lets the row being installed finish and leaves the rest.
 - **Retry**, after a failure, queues the failed row and the ones that didn't run, and starts again.
 - **Clear**, when everything queued is done, puts the finished rows away. The queue does it by itself ten minutes
-  after it finishes.
+  after it finishes. It also takes Retry's place when a failed run has nothing left to install, as when its
+  containers have got their new versions some other way.
+
+A row whose containers are on the versions the queue was installing shows as updated, even if the queue gave up on
+it, as it can when WUD notices a new version late.
 
 <img src="https://raw.githubusercontent.com/jesmak/wud-queue-card/main/docs/images/failed-light.png#gh-light-mode-only" width="490" alt="A queue stopped by a failure, the failed row red with the reason, the rows after it not installed, and Retry in the header">
 <img src="https://raw.githubusercontent.com/jesmak/wud-queue-card/main/docs/images/failed-dark.png#gh-dark-mode-only" width="490" alt="A queue stopped by a failure, the failed row red with the reason, the rows after it not installed, and Retry in the header">
@@ -155,6 +162,9 @@ The queue's own README tells how it decides an install failed, and what its even
 In a sections view the card takes 12 columns by default and at least 6, and grows as tall as its open list. It works
 at any width. On a narrow card long versions move under the container's name, and on a wide one a waiting row's
 versions sit beside its name, next to the install button.
+
+<img src="https://raw.githubusercontent.com/jesmak/wud-queue-card/main/docs/images/narrow-light.png#gh-light-mode-only" width="250" alt="The queue on a card half a section wide, the long versions of a group of services wrapped under its name beside the Updating pill">
+<img src="https://raw.githubusercontent.com/jesmak/wud-queue-card/main/docs/images/narrow-dark.png#gh-dark-mode-only" width="250" alt="The queue on a card half a section wide, the long versions of a group of services wrapped under its name beside the Updating pill">
 
 Set `height` to give the card a height of its own, so that a long list doesn't make it taller than the rest of the
 dashboard. The title and the section lines stay where they are, and the open list scrolls in what is left. The same

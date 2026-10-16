@@ -64,7 +64,6 @@ export interface QueueItem {
 
 /** The WUD Queue integration's queue, read from its sensor. */
 export interface Queue {
-    entity_id: string;
     state: "idle" | "running" | "stopped" | "failed";
     stopping: boolean;
     items: QueueItem[];

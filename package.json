@@ -1,6 +1,6 @@
 {
     "name": "wud-queue-card",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "description": "Home Assistant dashboard card for What's Up Docker's container updates, grouped by compose project",
     "keywords": [
         "home-assistant",

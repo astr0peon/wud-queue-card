@@ -14,7 +14,18 @@ import type { CSSResultGroup, PropertyValues, TemplateResult } from "lit";
 import { customElement, property, state } from "lit/decorators.js";
 
 import { CARD_VERSION, DONE_KEEP } from "./const";
-import { containerOf, follow, followQueue, isWud, projectsOf, queueEntityId, queueOf, selectedEntities, servicesDone } from "./containers";
+import {
+    containerOf,
+    follow,
+    followQueue,
+    isWud,
+    projectsOf,
+    queueEntityId,
+    queueOf,
+    retryable,
+    selectedEntities,
+    servicesDone,
+} from "./containers";
 import type { Followed, Install } from "./containers";
 import "./editor";
 import type { HomeAssistant } from "./hass";
@@ -47,6 +58,11 @@ registry.customCards.push({
 
 type Section = "pending" | "current";
 
+/** Whether a row is installing, by WUD's word or by the install the card or the queue follows. */
+function running(unit: Unit, followed: Map<string, Followed>): boolean {
+    return unit.installing || followed.get(unit.key)?.status === "running";
+}
+
 @customElement("wud-queue-card")
 export class WudQueueCard extends LitElement {
     @property({ attribute: false }) public hass?: HomeAssistant;
@@ -68,6 +84,8 @@ export class WudQueueCard extends LitElement {
     private slideTimer?: number;
     /** How each remembered install is going, worked out once per update. */
     private followed = new Map<string, Followed>();
+    /** The projects to show, worked out once per update. */
+    private projectList: Project[] = [];
 
     public static getConfigElement(): HTMLElement {
         return document.createElement("wud-queue-card-editor");
@@ -155,7 +173,8 @@ export class WudQueueCard extends LitElement {
      * comes out, and a finished one after `DONE_KEEP`.
      */
     protected willUpdate(): void {
-        const units = new Map(this.projects().flatMap((p) => p.units.map((u) => [u.key, u] as const)));
+        this.projectList = this.projects();
+        const units = new Map(this.projectList.flatMap((p) => p.units.map((u) => [u.key, u] as const)));
         // The first update to come in opens the waiting list, whichever section was open. Later ones leave it be.
         const pending = [...units.values()].some((u) => u.pending);
         if (this.hadPending === false && pending) {
@@ -183,8 +202,7 @@ export class WudQueueCard extends LitElement {
         if (queue) {
             for (const [key, unit] of units) {
                 const followed = followQueue(unit, queue);
-                // A queuing the card was just refused says so, over whatever an older run says about the row.
-                if (followed && this.followed.get(key)?.install.error === undefined) {
+                if (followed) {
                     this.followed.set(key, followed);
                 }
             }
@@ -203,7 +221,7 @@ export class WudQueueCard extends LitElement {
         if (!this.hass || !this.config) {
             return nothing;
         }
-        const projects = this.projects();
+        const projects = this.projectList;
         const title = this.config.title ?? this.text("common.title");
         if (projects.length === 0) {
             return html`<ha-card>
@@ -221,8 +239,12 @@ export class WudQueueCard extends LitElement {
         const currentCount = currentProjects.reduce((n, p) => n + p.units.length, 0);
         // With updates waiting, one of the two sections is always open. Without, the up-to-date one opens and shuts.
         const open: Section | "none" = this.open === "current" ? "current" : pendingUnits.length > 0 ? "pending" : "none";
-        // The queue takes installs at any time, except while it stops. Without it, one runs at a time.
-        const busy = queue ? queue.stopping : pendingUnits.some((u) => u.installing || followed.get(u.key)?.status === "running");
+        // The queue takes installs at any time, except while it stops, while a call to it is on its way, or while its
+        // sensor is away, as the integration starts. Without the integration, one install runs at a time.
+        const busy =
+            queueEntityId(this.hass) !== undefined
+                ? !queue || queue.stopping || this.acting
+                : pendingUnits.some((u) => running(u, followed));
         const height = this.config.height ? `height:${this.config.height}px` : "";
 
         return html`
@@ -279,9 +301,9 @@ export class WudQueueCard extends LitElement {
 
     /** One line under the title: what is going on, or what is waiting. */
     private statusLine(units: Unit[], followed: Map<string, Followed>, queue: Queue | undefined): TemplateResult {
-        const running = units.filter((u) => u.installing || followed.get(u.key)?.status === "running");
-        if (running.length > 0) {
-            const names = running.map((u) => u.name).join(", ");
+        const installing = units.filter((u) => running(u, followed));
+        if (installing.length > 0) {
+            const names = installing.map((u) => u.name).join(", ");
             return html`<div class="hd-sub">${this.text("common.updating", { name: names })}</div>`;
         }
         const failed = units.filter((u) => followed.get(u.key)?.status === "failed");
@@ -316,12 +338,7 @@ export class WudQueueCard extends LitElement {
 
     private currentProject(project: Project): TemplateResult {
         if (project.units.length === 1) {
-            const unit = project.units[0];
-            return html`<div class="row muted" role="button" tabindex="0" @click=${() => this.moreInfo(unit)} @keydown=${this.onKey(unit)}>
-                <ha-icon class="ico" icon="mdi:docker"></ha-icon>
-                <div class="info"><div class="name">${unit.name}${this.serviceCount(unit)}</div></div>
-                <div class="end"><span class="ver">${unit.containers[0].installed}</span></div>
-            </div>`;
+            return this.siblingRow(project.units[0], false);
         }
         return html`<div class="proj">
             ${this.projectLabel(project, true)}
@@ -388,9 +405,15 @@ export class WudQueueCard extends LitElement {
         `;
     }
 
-    /** An up-to-date row in a project's group: a thin line with its version. */
-    private siblingRow(unit: Unit): TemplateResult {
-        return html`<div class="row sib muted" role="button" tabindex="0" @click=${() => this.moreInfo(unit)} @keydown=${this.onKey(unit)}>
+    /** An up-to-date row with its version: a thin line in a project's group, or a project of its own. */
+    private siblingRow(unit: Unit, inGroup = true): TemplateResult {
+        return html`<div
+            class="row ${inGroup ? "sib" : ""} muted"
+            role="button"
+            tabindex="0"
+            @click=${() => this.moreInfo(unit)}
+            @keydown=${this.onKey(unit)}
+        >
             <ha-icon class="ico" icon="mdi:docker"></ha-icon>
             <div class="info"><div class="name">${unit.name}${this.serviceCount(unit)}</div></div>
             <div class="end"><span class="ver">${unit.containers[0].installed}</span></div>
@@ -459,7 +482,7 @@ export class WudQueueCard extends LitElement {
 
     /** On the closed row of waiting updates: whether something is installing or has failed. */
     private sectionPill(units: Unit[], followed: Map<string, Followed>): TemplateResult | typeof nothing {
-        if (units.some((u) => u.installing || followed.get(u.key)?.status === "running")) {
+        if (units.some((u) => running(u, followed))) {
             return html`<span class="pill running">${this.text("status.running")}</span>`;
         }
         if (units.some((u) => followed.get(u.key)?.status === "failed")) {
@@ -475,30 +498,27 @@ export class WudQueueCard extends LitElement {
             return;
         }
         const pending = unit.containers.filter((c) => c.pending);
+        // With the integration the queue takes the row, and the card follows the queue. A refusal shows in Home
+        // Assistant's own notice, as with the queue's buttons, and the row keeps showing what the queue says.
+        if (queueEntityId(this.hass) !== undefined) {
+            const installs = new Map(this.installs);
+            installs.delete(unit.key);
+            this.installs = installs;
+            this.call("enqueue", { entity_id: pending.map((c) => c.entity_id) });
+            return;
+        }
+        // Without it, the card sends the install itself and follows it. Services of one compose project can all be sent
+        // at once, as WUD installs them one after another.
         const install: Install = {
             at: Date.now(),
             from: Object.fromEntries(unit.containers.map((c) => [c.entity_id, c.installed])),
             targets: Object.fromEntries(unit.containers.map((c) => [c.entity_id, c.pending ? c.latest : c.installed])),
             started: false,
         };
-        // With the integration the queue takes the row, and the card follows the queue. Without it, the card sends the
-        // install itself and follows it. Services of one compose project can all be sent at once, as WUD installs them
-        // one after another.
-        const queued = queueOf(this.hass) !== undefined;
-        const installs = new Map(this.installs);
-        if (queued) {
-            installs.delete(unit.key);
-        } else {
-            installs.set(unit.key, install);
-        }
-        this.installs = installs;
+        this.installs = new Map(this.installs).set(unit.key, install);
         this.now = Date.now();
         try {
-            if (queued) {
-                await this.hass.callService("wud_queue", "enqueue", { entity_id: pending.map((c) => c.entity_id) });
-            } else {
-                await this.hass.callService("update", "install", {}, { entity_id: pending.map((c) => c.entity_id) });
-            }
+            await this.hass.callService("update", "install", {}, { entity_id: pending.map((c) => c.entity_id) });
         } catch (error) {
             // Home Assistant refused it, so WUD never got it. Say why on the row.
             const message = error instanceof Error ? error.message : String((error as { message?: unknown })?.message ?? error);
@@ -523,8 +543,11 @@ export class WudQueueCard extends LitElement {
                 this.call("stop"),
             );
         }
+        // A failed run whose containers have all got their updates some other way has nothing to try again, only to put away.
         if (queue.state === "failed") {
-            return this.actionButton(this.text("common.retry"), false, () => this.call("retry"));
+            return this.hass && retryable(this.hass, queue)
+                ? this.actionButton(this.text("common.retry"), false, () => this.call("retry"))
+                : this.actionButton(this.text("common.clear"), false, () => this.call("clear"));
         }
         const waiting = units
             .filter((u) => u.pending && !["queued", "running"].includes(followed.get(u.key)?.status ?? ""))
@@ -709,13 +732,9 @@ export class WudQueueCard extends LitElement {
             }
 
             .message {
-                padding: 0 16px;
+                padding: 4px 16px 14px;
                 font-size: 12px;
                 color: var(--secondary-text-color);
-            }
-
-            .message {
-                padding: 4px 16px 14px;
             }
 
             .list {
@@ -816,9 +835,9 @@ export class WudQueueCard extends LitElement {
                 font-weight: 500;
             }
 
+            /* Never squeezed below its pill or button. A long version wraps within its half of the row instead. */
             .end {
-                flex: 0 1 auto;
-                min-width: 0;
+                flex: none;
                 max-width: 50%;
                 text-align: right;
                 display: flex;
