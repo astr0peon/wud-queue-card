@@ -1,4 +1,4 @@
-/*! wud-queue-card 1.0.2 | MIT License */
+/*! wud-queue-card 1.0.3 | MIT License */
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
 var __decorateClass = (decorators, target, key, kind) => {
@@ -604,7 +604,7 @@ function r5(r6) {
 }
 
 // src/const.ts
-var CARD_VERSION = "1.0.2";
+var CARD_VERSION = "1.0.3";
 var START_TIMEOUT = 6e4;
 var VERSION_GRACE = 12e4;
 var DONE_KEEP = 6e5;
@@ -1781,7 +1781,7 @@ var WudQueueCard = class extends i4 {
             .fold {
                 display: grid;
                 grid-template-rows: 0fr;
-                transition: grid-template-rows 0.2s ease;
+                transition: grid-template-rows var(--ha-animation-duration-normal, 250ms) ease;
             }
 
             .fold.open {

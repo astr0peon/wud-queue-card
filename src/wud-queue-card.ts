@@ -987,7 +987,7 @@ export class WudQueueCard extends LitElement {
             .fold {
                 display: grid;
                 grid-template-rows: 0fr;
-                transition: grid-template-rows 0.2s ease;
+                transition: grid-template-rows var(--ha-animation-duration-normal, 250ms) ease;
             }
 
             .fold.open {
