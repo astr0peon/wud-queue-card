@@ -170,6 +170,15 @@ export interface Followed {
 }
 
 /**
+ * Whether a container is on the version it was headed for. A tag that moves (`latest`, `stable`) keeps its name when
+ * it is updated: WUD headed for a digest, and once installed reports the tag as both installed and latest. A container
+ * whose installed version equals its current latest therefore has no update left, whichever target was recorded.
+ */
+function reached(c: { installed: string; latest: string }, target: string | undefined): boolean {
+    return c.installed === target || (c.installed !== "" && c.installed === c.latest);
+}
+
+/**
  * How an install the card started is going.
  *
  * WUD reports no failures. It marks the container as installing when the command arrives and unmarks it
@@ -183,7 +192,7 @@ export function follow(unit: Unit, install: Install, now: number): Followed {
     const next: Install = { ...install, started, ended };
 
     // Checked before a refusal, as the row may have been installed some other way since, such as from Home Assistant.
-    if (unit.containers.every((c) => c.installed === install.targets[c.entity_id])) {
+    if (unit.containers.every((c) => reached(c, install.targets[c.entity_id]))) {
         // The first time it is seen done stays, so that the card can forget it a while later.
         return { install: { ...next, ended: install.ended ?? ended ?? now }, status: "done" };
     }
@@ -203,7 +212,7 @@ export function follow(unit: Unit, install: Install, now: number): Followed {
 
 /** How many of a unit's services are on their new version, while it installs. */
 export function servicesDone(unit: Unit, install: Install | undefined): number {
-    return install ? unit.containers.filter((c) => c.installed === install.targets[c.entity_id]).length : 0;
+    return install ? unit.containers.filter((c) => reached(c, install.targets[c.entity_id])).length : 0;
 }
 
 /** The WUD Queue integration's sensor, found by its platform so that a renamed entity is found too. */
@@ -244,7 +253,7 @@ export function followQueue(unit: Unit, queue: Queue): Followed | undefined {
         started: true,
     };
     // The versions win over the queue's word: WUD may tell of a new version only after the queue has given up on it.
-    if (unit.containers.every((c) => c.installed === install.targets[c.entity_id])) {
+    if (unit.containers.every((c) => reached(c, install.targets[c.entity_id]))) {
         return { install, status: "done" };
     }
     return {
