@@ -698,11 +698,14 @@ function projectsOf(containers) {
   });
   return result.sort((a3, b3) => Number(hasWud(a3)) - Number(hasWud(b3)) || byName(shown(a3), shown(b3)));
 }
+function reached(c4, target) {
+  return c4.installed === target || c4.installed !== "" && c4.installed === c4.latest;
+}
 function follow(unit, install, now) {
   const started = install.started || unit.installing;
   const ended = unit.installing ? void 0 : started ? install.ended ?? now : void 0;
   const next = { ...install, started, ended };
-  if (unit.containers.every((c4) => c4.installed === install.targets[c4.entity_id])) {
+  if (unit.containers.every((c4) => reached(c4, install.targets[c4.entity_id]))) {
     return { install: { ...next, ended: install.ended ?? ended ?? now }, status: "done" };
   }
   if (install.error !== void 0) {
@@ -717,7 +720,7 @@ function follow(unit, install, now) {
   return now - install.at > START_TIMEOUT ? { install: next, status: "failed", reason: "start" } : { install: next, status: "running" };
 }
 function servicesDone(unit, install) {
-  return install ? unit.containers.filter((c4) => c4.installed === install.targets[c4.entity_id]).length : 0;
+  return install ? unit.containers.filter((c4) => reached(c4, install.targets[c4.entity_id])).length : 0;
 }
 function queueEntityId(hass) {
   return Object.entries(hass.entities ?? {}).find(([id, e5]) => e5?.platform === "wud_queue" && id.startsWith("sensor."))?.[0];
@@ -747,7 +750,7 @@ function followQueue(unit, queue) {
     targets: Object.fromEntries(unit.containers.map((c4) => [c4.entity_id, versions.get(c4.entity_id)?.to ?? c4.installed])),
     started: true
   };
-  if (unit.containers.every((c4) => c4.installed === install.targets[c4.entity_id])) {
+  if (unit.containers.every((c4) => reached(c4, install.targets[c4.entity_id]))) {
     return { install, status: "done" };
   }
   return {
